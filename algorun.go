@@ -337,7 +337,11 @@ Options:
   -h --help     Show this screen.
   --version     Show version.`
 
-	opts, err := docopt.ParseArgs(usage, nil, "0.1.0")
+	parser := docopt.Parser{
+		OptionsFirst: true,
+	}
+
+	opts, err := parser.ParseArgs(usage, nil, "0.1.0")
 	if err != nil {
 		panic(err)
 	}
@@ -350,13 +354,11 @@ Options:
 	}
 
 	release := config.Release
-
 	if release == "" {
 		release = "stable"
 	}
 
 	Props.AlgoRunDir, err = filepath.Abs(filepath.Join(".", "test-algorun-dir"))
-
 	if err != nil {
 		panic(err)
 	}
@@ -389,6 +391,14 @@ Options:
 		nodeStart()
 	} else if config.Status {
 		nodeStatus()
+	} else if config.Start {
+		nodeStart()
+	} else if config.Stop {
+		nodeStop()
+	} else if config.Catchup {
+		catchup()
+	} else if config.Goal {
+		goalCmd(strings.Join(config.GoalArgs, " "))
 	} else {
 		panic("Unrecognized command")
 	}
