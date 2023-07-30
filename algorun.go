@@ -7,7 +7,6 @@ import (
 	"errors"
 	"fmt"
 	"io/ioutil"
-	"log"
 	"net/http"
 	"os"
 	"os/exec"
@@ -57,23 +56,24 @@ type Config struct {
 func bytesToFile(path string, data []byte) {
 	err := ioutil.WriteFile(path, data, 0644)
 	if err != nil {
-		log.Fatal(err)
+		panic(err)
 	}
 }
 
 func fileToString(path string) string {
 	fileContent, err := ioutil.ReadFile(path)
 	if err != nil {
-		log.Fatal(err)
+		panic(err)
 	}
 
 	// Convert []byte to string
 	return string(fileContent)
 }
 
-func execCmd(command string) error {
+func execCmd(command string, dir string) error {
 	splitCommand := strings.Split(command, " ")
 	cmd := exec.Command(splitCommand[0], splitCommand[1:]...)
+	cmd.Dir = dir
 
 	stdout, err := cmd.StdoutPipe()
 
@@ -112,14 +112,14 @@ func catchup() {
 
 	responseData, err := ioutil.ReadAll(response.Body)
 	if err != nil {
-		log.Fatal(err)
+		panic(err)
 	}
 
 	goalCmd(fmt.Sprintf("node catchup %s", string(responseData)))
 }
 
 func goalCmd(args string) {
-	execCmd(fmt.Sprintf("%s -d %s %s", Props.GoalPath, Props.DataDir, args))
+	execCmd(fmt.Sprintf("%s -d %s %s", Props.GoalPath, Props.DataDir, args), ".")
 }
 
 func nodeStart() {
@@ -320,6 +320,57 @@ Loop:
 	fmt.Println("Node is now catching up to mainnet!")
 }
 
+func dashboardCmd() {
+	downloadFile("https://github.com/AlgoNode/alloctrl/archive/main.tar.gz", Props.DownloadsDir, "Downloading alloctrl tarball")
+
+	tarball, err := os.Open(filepath.Join(Props.DownloadsDir, "alloctrl-main.tar.gz"))
+
+	if err != nil {
+		panic(err)
+	}
+
+	defer tarball.Close()
+	err = extract.Gz(context.Background(), tarball, Props.AlgoRunDir, nil)
+
+	if err != nil {
+		panic(err)
+	}
+
+	algodNet := fileToString(filepath.Join(Props.DataDir, "algod.net"))
+	algodNetSplit := strings.Split(algodNet, ":")
+	algodPort := strings.TrimSpace(algodNetSplit[len(algodNetSplit)-1])
+
+	adminToken := fileToString(filepath.Join(Props.DataDir, "algod.admin.token"))
+
+	env := fmt.Sprintf(`PUBLIC_ALGOD_HOST=127.0.0.1
+PUBLIC_ALGOD_PORT=%s
+SECRET_ALGOD_ADMIN_TOKEN=%s
+PUBLIC_CHECK_VERSION_ON_GITHUB=true
+PUBLIC_ALLOW_EXTERNAL_APIS=true`, algodPort, adminToken)
+
+	alloctrlDir := filepath.Join(Props.AlgoRunDir, "alloctrl-main")
+
+	bytesToFile(filepath.Join(alloctrlDir, ".env"), []byte(env))
+
+	err = execCmd("npm install", alloctrlDir)
+
+	if err != nil {
+		panic(err)
+	}
+
+	err = execCmd("npm run build", alloctrlDir)
+
+	if err != nil {
+		panic(err)
+	}
+
+	err = execCmd("npm run start", alloctrlDir)
+
+	if err != nil {
+		panic(err)
+	}
+}
+
 func main() {
 	usage := `algorun
 
@@ -399,6 +450,8 @@ Options:
 		catchup()
 	} else if config.Goal {
 		goalCmd(strings.Join(config.GoalArgs, " "))
+	} else if config.Dashboard {
+		dashboardCmd()
 	} else {
 		panic("Unrecognized command")
 	}
