@@ -1,11 +1,13 @@
 package main
 
 import (
+	"bufio"
 	"context"
 	"errors"
 	"fmt"
 	"log"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"regexp"
 	"runtime"
@@ -29,6 +31,7 @@ var Props struct {
 	TempDir      string
 	DataDir      string
 	BinDir       string
+	GoalPath     string
 }
 
 type Config struct {
@@ -45,6 +48,54 @@ type Config struct {
 	ForceDownload bool     `docopt:"--force-download"`
 	Release       string   `docopt:"<release>"`
 	GoalArgs      []string `docopt:"<goal-args>"`
+}
+
+func execCmd(command string) error {
+	splitCommand := strings.Split(command, " ")
+	cmd := exec.Command(splitCommand[0], splitCommand[1:]...)
+
+	stdout, err := cmd.StdoutPipe()
+
+	if err != nil {
+		return err
+	}
+
+	cmd.Stderr = cmd.Stdout
+	err = cmd.Start()
+
+	if err != nil {
+		return err
+	}
+
+	scanner := bufio.NewScanner(stdout)
+	scanner.Split(bufio.ScanLines)
+	for scanner.Scan() {
+		line := scanner.Text()
+		fmt.Println(line)
+	}
+	err = cmd.Wait()
+
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func goalCmd(args string) {
+	execCmd(fmt.Sprintf("%s -d %s %s", Props.GoalPath, Props.DataDir, args))
+}
+
+func nodeStart() {
+	goalCmd("node start")
+}
+
+func nodeStop() {
+	goalCmd("node stop")
+}
+
+func nodeStatus() {
+	goalCmd("node status")
 }
 
 func downloadFile(url string, dir string, desc string) error {
@@ -131,6 +182,10 @@ func createCmd(config Config, release string) {
 
 	example_config := filepath.Join(Props.TempDir, "data", "config.json.example")
 	copy.Copy(example_config, filepath.Join(Props.DataDir, "config.json"))
+
+	nodeStart()
+	nodeStatus()
+	nodeStop()
 }
 
 func main() {
@@ -181,6 +236,7 @@ Options:
 	Props.BaseDir = filepath.Join(Props.AlgoRunDir, "base")
 	Props.DataDir = filepath.Join(Props.BaseDir, "data")
 	Props.BinDir = filepath.Join(Props.BaseDir, "bin")
+	Props.GoalPath = filepath.Join(Props.BinDir, "goal")
 
 	for _, dir := range [...]string{
 		Props.DownloadsDir,
