@@ -115,7 +115,7 @@ func catchup() {
 		panic(err)
 	}
 
-	goalCmd(fmt.Sprintf("node catchup %s", string(responseData)))
+	goalCmd(fmt.Sprintf("node catchup %s", strings.TrimSpace(string(responseData))))
 }
 
 func goalCmd(args string) {
