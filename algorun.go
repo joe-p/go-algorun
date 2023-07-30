@@ -16,13 +16,19 @@ import (
 	"github.com/docopt/docopt-go"
 	"github.com/schollz/progressbar/v3"
 
+	"github.com/codeclysm/extract/v3"
 	"github.com/google/go-github/v53/github"
+
+	"github.com/otiai10/copy"
 )
 
 var Props struct {
 	AlgoRunDir   string
 	DownloadsDir string
-	ArchivesDir  string
+	BaseDir      string
+	TempDir      string
+	DataDir      string
+	BinDir       string
 }
 
 type Config struct {
@@ -102,20 +108,29 @@ func createCmd(config Config, release string) {
 
 	version := versionRegex.FindString(versionString)
 
-	algorunTarballName := fmt.Sprintf("algorun_%s-%s_%s.tar.gz", runtime.GOOS, runtime.GOARCH, versionString)
+	releaseChannel := channelRegex.FindString(versionString)[1:]
 
-	algorunTarball := filepath.Join(Props.DownloadsDir, algorunTarballName)
+	releaseTarballName := fmt.Sprintf("node_%s_%s-%s_%s.tar.gz", releaseChannel, runtime.GOOS, runtime.GOARCH, version)
+	awsUrl := fmt.Sprintf("https://algorand-releases.s3.amazonaws.com/channel/%s/%s", releaseChannel, releaseTarballName)
 
-	if _, err := os.Stat(algorunTarball); err == nil {
-		fmt.Printf("File exists\n")
-	} else {
-		releaseChannel := channelRegex.FindString(versionString)[1:]
+	downloadFile(awsUrl, Props.DownloadsDir, "Downloading release tarball")
 
-		releaseTarballName := fmt.Sprintf("node_%s_%s-%s_%s.tar.gz", releaseChannel, runtime.GOOS, runtime.GOARCH, version)
-		awsUrl := fmt.Sprintf("https://algorand-releases.s3.amazonaws.com/channel/%s/%s", releaseChannel, releaseTarballName)
+	file, _ := os.Open(filepath.Join(Props.DownloadsDir, releaseTarballName))
+	extract.Gz(context.Background(), file, filepath.Join(Props.TempDir), nil)
 
-		downloadFile(awsUrl, Props.DownloadsDir, "Downloading release tarball")
+	bins := [...]string{"goal", "kmd", "algod"}
+
+	tmp_bin_dir := filepath.Join(Props.TempDir, "bin")
+
+	for _, bin := range bins {
+		copy.Copy(filepath.Join(tmp_bin_dir, bin), filepath.Join(Props.BinDir, bin))
 	}
+
+	mainnet_geneis := filepath.Join(Props.TempDir, "genesis", "mainnet", "genesis.json")
+	copy.Copy(mainnet_geneis, filepath.Join(Props.DataDir, "genesis.json"))
+
+	example_config := filepath.Join(Props.TempDir, "node", "data", "config.json.example")
+	copy.Copy(example_config, filepath.Join(Props.DataDir, "config.json"))
 }
 
 func main() {
@@ -162,7 +177,10 @@ Options:
 	}
 
 	Props.DownloadsDir = filepath.Join(Props.AlgoRunDir, "downloads")
-	Props.ArchivesDir = filepath.Join(Props.AlgoRunDir, "archives")
+	Props.TempDir = filepath.Join(Props.AlgoRunDir, "temp")
+	Props.BaseDir = filepath.Join(Props.AlgoRunDir, "base")
+	Props.DataDir = filepath.Join(Props.BaseDir, "data")
+	Props.BinDir = filepath.Join(Props.BaseDir, "bin")
 
 	if config.Create {
 		createCmd(config, release)
