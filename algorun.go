@@ -186,9 +186,7 @@ func getVersion(match string) (string, error) {
 	return "", errors.New("no match found")
 }
 
-func createCmd(config Config, release string) {
-	nodeStop()
-	os.RemoveAll(Props.DataDir)
+func downloadAndExtractRelease(release string) {
 	versionString, err := getVersion(release)
 	if err != nil {
 		panic(err)
@@ -208,7 +206,9 @@ func createCmd(config Config, release string) {
 
 	file, _ := os.Open(filepath.Join(Props.DownloadsDir, releaseTarballName))
 	extract.Gz(context.Background(), file, filepath.Join(Props.TempDir), nil)
+}
 
+func copyBinariesFromTmp() {
 	bins := [...]string{"goal", "kmd", "algod"}
 
 	tmp_bin_dir := filepath.Join(Props.TempDir, "bin")
@@ -216,6 +216,13 @@ func createCmd(config Config, release string) {
 	for _, bin := range bins {
 		copy.Copy(filepath.Join(tmp_bin_dir, bin), filepath.Join(Props.BinDir, bin))
 	}
+}
+
+func createCmd(config Config, release string) {
+	nodeStop()
+	os.RemoveAll(Props.DataDir)
+
+	copyBinariesFromTmp()
 
 	// TODO: Embed genesis
 	mainnetGenesis := filepath.Join(Props.TempDir, "genesis", "mainnet", "genesis.json")
@@ -370,8 +377,16 @@ Options:
 		os.MkdirAll(dir, 0755)
 	}
 
+	if config.Create || config.Update {
+		downloadAndExtractRelease(release)
+	}
+
 	if config.Create {
 		createCmd(config, release)
+	} else if config.Update {
+		nodeStop()
+		copyBinariesFromTmp()
+		nodeStart()
 	} else if config.Status {
 		nodeStatus()
 	} else {
