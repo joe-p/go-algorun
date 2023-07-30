@@ -129,7 +129,7 @@ func createCmd(config Config, release string) {
 	mainnet_geneis := filepath.Join(Props.TempDir, "genesis", "mainnet", "genesis.json")
 	copy.Copy(mainnet_geneis, filepath.Join(Props.DataDir, "genesis.json"))
 
-	example_config := filepath.Join(Props.TempDir, "node", "data", "config.json.example")
+	example_config := filepath.Join(Props.TempDir, "data", "config.json.example")
 	copy.Copy(example_config, filepath.Join(Props.DataDir, "config.json"))
 }
 
@@ -181,6 +181,15 @@ Options:
 	Props.BaseDir = filepath.Join(Props.AlgoRunDir, "base")
 	Props.DataDir = filepath.Join(Props.BaseDir, "data")
 	Props.BinDir = filepath.Join(Props.BaseDir, "bin")
+
+	for _, dir := range [...]string{
+		Props.DownloadsDir,
+		Props.TempDir,
+		Props.DataDir,
+		Props.BinDir,
+	} {
+		os.MkdirAll(dir, 0755)
+	}
 
 	if config.Create {
 		createCmd(config, release)
