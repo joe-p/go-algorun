@@ -13,10 +13,13 @@ import (
 	"path/filepath"
 	"regexp"
 	"runtime"
+	"strconv"
 	"strings"
 	"time"
 
-	"github.com/algorand/go-algorand-sdk/client/v2/algod"
+	"github.com/algorand/go-algorand-sdk/v2/client/v2/algod"
+	"github.com/algorand/go-algorand-sdk/v2/types"
+
 	"github.com/cavaliergopher/grab/v3"
 	"github.com/docopt/docopt-go"
 	"github.com/schollz/progressbar/v3"
@@ -25,6 +28,9 @@ import (
 	"github.com/google/go-github/v53/github"
 
 	"github.com/otiai10/copy"
+
+	"github.com/algorand/node-ui/messages"
+	"github.com/algorand/node-ui/tui"
 )
 
 var Props struct {
@@ -51,6 +57,7 @@ type Config struct {
 	ForceDownload bool     `docopt:"--force-download"`
 	Release       string   `docopt:"<release>"`
 	GoalArgs      []string `docopt:"<goal-args>"`
+	Tui           bool     `docopt:"tui"`
 }
 
 func bytesToFile(path string, data []byte) {
@@ -383,6 +390,7 @@ Usage:
   algorun status
   algorun goal [<goal-args>...]
   algorun dashboard
+  algorun tui
 
 Options:
   -h --help     Show this screen.
@@ -452,6 +460,26 @@ Options:
 		goalCmd(strings.Join(config.GoalArgs, " "))
 	} else if config.Dashboard {
 		dashboardCmd()
+	} else if config.Tui {
+		algodNet := fileToString(filepath.Join(Props.DataDir, "algod.net"))
+		algodNetSplit := strings.Split(algodNet, ":")
+		algodPortStr := strings.TrimSpace(algodNetSplit[len(algodNetSplit)-1])
+
+		algodPort, err := strconv.ParseUint(algodPortStr, 10, 64)
+
+		if err != nil {
+			panic(err)
+		}
+
+		algodToken := strings.TrimSpace((filepath.Join(Props.DataDir, "algod.token")))
+		algodClient, err := algod.MakeClient(fmt.Sprintf("http://localhost:%d", algodPort), algodToken)
+
+		if err != nil {
+			panic(err)
+		}
+
+		requestor := messages.MakeRequestor(algodClient, Props.DataDir)
+		tui.Start(0, requestor, []types.Address{})
 	} else {
 		panic("Unrecognized command")
 	}
